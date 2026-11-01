@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="ru" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Печать под видео</title>
+<style>
+:root{--type:Georgia,serif;--bg:#f4f5f7;--ink:#1c1f24;--muted:#6b717c;--line:#d9dce2;--ok:#1d7a55;--bad:#c2410c;--panel:#fff}
+[data-theme=dark]{color-scheme:dark;--bg:#17191d;--ink:#e8e6e1;--muted:#8c929c;--line:#2d3139;--ok:#8fd4b0;--bad:#ff8a7a;--panel:#1e2126}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.5rem;font-weight:600;margin:0 0 8px}
+h2{font-size:.95rem;font-weight:600;color:var(--muted);margin:32px 0 12px}
+.muted{color:var(--muted);margin:0}
+.err{color:var(--bad)}
+.frame{position:relative;aspect-ratio:16/9;background:#000;border-radius:6px;overflow:hidden;margin-top:12px}
+.frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.line{font-family:var(--type);font-size:clamp(1.2rem,4.6vw,1.6rem);line-height:1.6;white-space:pre-wrap;word-break:break-word;margin:20px 0 8px;min-height:4.8em}
+.line .ok{color:var(--ok)}
+.line .bad{color:var(--bad);text-decoration:underline}
+.line .typed{color:var(--ink)}
+.line .cur{border-bottom:2px solid var(--ink)}
+.hint{min-height:1.5em;color:var(--muted);margin:4px 0 0}
+input[type=text],textarea,select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px;width:100%}
+#typed{font-family:var(--type);font-size:16px;margin-top:8px}
+button{font:inherit;color:var(--ink);background:none;border:1px solid var(--line);border-radius:6px;padding:9px 14px;cursor:pointer}
+button.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button.ghost{border-color:transparent;color:var(--muted)}
+:focus-visible{outline:2px solid var(--ok);outline-offset:2px}
+label{display:block;color:var(--muted);font-size:.9rem;margin:12px 0 6px}
+details summary{cursor:pointer;padding:8px 0}
+.row{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding:4px 0}
+.row .pick{flex:1;border:0;text-align:left;padding:8px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px}
+.stats div{border-top:1px solid var(--line);padding-top:8px}
+.stats small{display:block;color:var(--muted);font-size:.78rem}
+.stats span{font-size:1.25rem;font-variant-numeric:tabular-nums}
+.opt{display:flex;align-items:center;gap:10px;color:var(--ink);font-size:1rem;margin:0;padding:8px 0}
+.opt input{width:20px;height:20px;margin:0}
+</style>
+</head>
+<body>
+<main>
+<h1>Печать под видео</h1>
+
+<h2>Видео</h2>
+<div id="list"></div>
+<details id="addBox">
+<summary>Добавить видео</summary>
+<label for="newTitle">Название</label>
+<input id="newTitle" type="text" placeholder="Например, интервью">
+<label for="newUrl">Ссылка на YouTube</label>
+<input id="newUrl" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://youtu.be/...">
+<label for="newSubs">Субтитры с таймкодами (SRT или VTT)</label>
+<textarea id="newSubs" rows="6" spellcheck="false" placeholder="Вставь текст субтитров"></textarea>
+<label for="newFile">Или загрузи файл</label>
+<input id="newFile" type="file" accept=".srt,.vtt,.txt">
+<p><button id="saveNew" class="primary" type="button">Сохранить</button></p>
+<p id="addErr" class="err" role="alert"></p>
+</details>
+
+<h2>Печать</h2>
+<p id="nowTitle" class="muted"></p>
+<div class="frame"><div id="player"></div></div>
+<div id="target" class="line"></div>
+<input id="typed" type="text" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" placeholder="Печатай здесь" disabled aria-label="Поле для печати">
+<p id="hint" class="hint">Выбери видео из списка</p>
+<div class="stats">
+<div><small>Слов в минуту</small><span id="wpm">0</span></div>
+<div><small>Точность</small><span id="acc">100%</span></div>
+<div><small>Строка</small><span id="pos">—</span></div>
+<div><small>Готово</small><span id="done">0</span></div>
+</div>
+
+<h2>Настройки</h2>
+<label class="opt"><input id="optHighlight" type="checkbox"> Подсветка ошибок</label>
+<label class="opt"><input id="optPause" type="checkbox"> Пауза видео при ошибке</label>
+<label class="opt"><input id="optSound" type="checkbox"> Звук клавиш</label>
+<label class="opt"><input id="optDark" type="checkbox"> Тёмная тема</label>
+<label for="font">Шрифт текста</label>
+<select id="font"><option value="serif">С засечками</option><option value="sans">Без засечек</option><option value="mono">Моноширинный</option></select>
+</main>
+
+<script>
+const FONTS={serif:'Charter,"Iowan Old Style",Georgia,serif',sans:'-apple-system,system-ui,"Segoe UI",Roboto,sans-serif',mono:'ui-monospace,"SF Mono",Menlo,Consolas,monospace'};
+const $=id=>document.getElementById(id);
+const store={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let videos=store.get('tp-videos',[]);
+let settings=Object.assign({dark:matchMedia('(prefers-color-scheme: dark)').matches,highlight:true,pause:true,sound:true,font:'serif'},store.get('tp-settings',{}));
+let current=null,cues=[],idx=-1,lineDone=false,prevLen=0,pausedByError=false,pending=null,pendingLoad=null;
+let stats={correct:0,total:0,start:0,lines:0};
+let player=null,ytReady=false,playerReady=false,audioCtx=null;
+const typed=$('typed'),targetEl=$('target'),hint=$('hint');
+const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n};
+const fold=s=>s.replace(/[‘’ʼ]/g,"'").replace(/[“”]/g,'"').replace(/[–—]/g,'-');
+const same=(a,b)=>fold(a)===fold(b);
+const wrongAt=(val,target)=>{for(let k=0;k<val.length;k++)if(k>=target.length||!same(val[k],target[k]))return true;return false};
+
+function toSec(s){return s.trim().replace(',','.').split(':').reduce((a,v)=>a*60+parseFloat(v),0)}
+function parseSubs(raw){
+  const out=[];
+  raw.replace(/\r/g,'').split(/\n\s*\n/).forEach(block=>{
+    const lines=block.split('\n');
+    const ti=lines.findIndex(l=>l.includes('-->'));
+    if(ti<0)return;
+    const [a,b]=lines[ti].split('-->');
+    const start=toSec(a),end=toSec(b.trim().split(/\s+/)[0]);
+    const text=lines.slice(ti+1).join(' ').replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim();
+    if(text&&!isNaN(start))out.push({start,end:isNaN(end)?start+3:end,text});
+  });
+  return out.sort((x,y)=>x.start-y.start);
+}
+function activeIndex(t){let lo=0,hi=cues.length-1,ans=-1;while(lo<=hi){const m=(lo+hi)>>1;if(cues[m].start<=t){ans=m;lo=m+1}else hi=m-1}return ans}
+function youtubeId(s){s=s.trim();if(/^[\w-]{11}$/.test(s))return s;const m=s.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([\w-]{11})/);return m?m[1]:null}
+
+function keyClick(){
+  if(!settings.sound)return;
+  try{
+    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended')audioCtx.resume();
+    const n=Math.floor(audioCtx.sampleRate*0.012),buf=audioCtx.createBuffer(1,n,audioCtx.sampleRate),d=buf.getChannelData(0);
+    for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,8);
+    const src=audioCtx.createBufferSource(),bp=audioCtx.createBiquadFilter(),g=audioCtx.createGain();
+    bp.type='bandpass';bp.frequency.value=2200+Math.random()*700;bp.Q.value=0.9;g.gain.value=0.35;
+    src.buffer=buf;src.connect(bp);bp.connect(g);g.connect(audioCtx.destination);src.start();
+  }catch(e){}
+}
+
+function render(){
+  const target=idx>=0?cues[idx].text:'',val=typed.value;
+  const frag=document.createDocumentFragment();
+  for(let k=0;k<Math.max(target.length,val.length);k++){
+    const s=el('span',null,k<target.length?target[k]:val[k]);
+    if(k<val.length){const good=k<target.length&&same(val[k],target[k]);s.className=settings.highlight?(good?'ok':'bad'):'typed'}
+    else if(k===val.length)s.className='cur';
+    frag.append(s);
+  }
+  targetEl.replaceChildren(frag);
+}
+function setLine(i){
+  idx=i;lineDone=false;prevLen=0;pausedByError=false;typed.readOnly=false;typed.value='';
+  render();
+  $('pos').textContent=i>=0?(i+1)+' из '+cues.length:'—';
+  hint.textContent=i>=0?'':'Жду первую строку…';
+}
+function updateStats(){
+  const mins=stats.start?(Date.now()-stats.start)/60000:0;
+  $('wpm').textContent=mins>0.02?Math.round(stats.correct/5/mins):0;
+  $('acc').textContent=(stats.total?Math.round(stats.correct/stats.total*100):100)+'%';
+  $('done').textContent=stats.lines;
+}
+
+typed.addEventListener('input',()=>{
+  if(idx<0||lineDone){typed.value='';prevLen=0;return}
+  const target=cues[idx].text,val=typed.value;
+  if(val.length>prevLen){
+    if(!stats.start)stats.start=Date.now();
+    for(let k=prevLen;k<val.length;k++){stats.total++;if(k<target.length&&same(val[k],target[k]))stats.correct++}
+    keyClick();
+  }
+  prevLen=val.length;
+  const bad=wrongAt(val,target);
+  if(val.length&&same(val,target)){lineDone=true;stats.lines++;typed.readOnly=true;hint.textContent='Строка готова, жди следующую'}
+  else hint.textContent=bad?'Есть ошибка, исправь её':'';
+  if(settings.pause&&player&&playerReady){
+    if(bad){player.pauseVideo();pausedByError=true}
+    else if(pausedByError){player.playVideo();pausedByError=false}
+  }
+  render();updateStats();
+});
+
+setInterval(()=>{
+  if(!playerReady||!cues.length)return;
+  const i=activeIndex(player.getCurrentTime());
+  if(i!==idx)setLine(i);
+  if(stats.start)updateStats();
+},200);
+
+function openVideo(v){
+  cues=parseSubs(v.subs);idx=-1;stats={correct:0,total:0,start:0,lines:0};
+  $('nowTitle').textContent=v.title;typed.disabled=false;typed.readOnly=false;
+  setLine(-1);updateStats();
+  if(!cues.length)hint.textContent='В субтитрах нет строк';
+  if(!ytReady){pending=v;hint.textContent='Загружаю плеер…';return}
+  if(!player){
+    player=new YT.Player('player',{videoId:v.videoId,width:'100%',height:'100%',playerVars:{playsinline:1,rel:0,modestbranding:1},
+      events:{onReady:()=>{playerReady=true;if(pendingLoad){player.loadVideoById(pendingLoad);pendingLoad=null}}}});
+  }else if(playerReady)player.loadVideoById(v.videoId);
+  else pendingLoad=v.videoId;
+}
+function clearCurrent(){
+  current=null;cues=[];idx=-1;typed.value='';typed.disabled=true;typed.readOnly=false;
+  $('nowTitle').textContent='';$('pos').textContent='—';hint.textContent='Выбери видео из списка';
+  stats={correct:0,total:0,start:0,lines:0};updateStats();render();
+  if(playerReady)player.stopVideo();
+}
+
+function renderList(){
+  const list=$('list');list.replaceChildren();
+  if(!videos.length){list.append(el('p','muted','Пока пусто. Добавь первое видео ниже.'));return}
+  videos.forEach(v=>{
+    const row=el('div','row'),pick=el('button','pick',v.title),del=el('button','ghost','Удалить');
+    pick.type='button';del.type='button';
+    pick.onclick=()=>openVideo(v);
+    del.onclick=()=>{
+      if(!confirm('Удалить «'+v.title+'» из списка?'))return;
+      videos=videos.filter(x=>x.id!==v.id);store.set('tp-videos',videos);
+      if(current&&current.id===v.id)clearCurrent();
+      renderList();
+    };
+    row.append(pick,del);list.append(row);
+  });
+}
+
+$('saveNew').onclick=async()=>{
+  const err=$('addErr');err.textContent='';
+  const id=youtubeId($('newUrl').value);
+  if(!id){err.textContent='Не нашёл ID видео. Вставь ссылку вида youtu.be/… или youtube.com/watch?v=…';return}
+  const f=$('newFile').files[0];
+  const subs=f?await f.text():$('newSubs').value.trim();
+  if(!subs){err.textContent='Вставь субтитры или загрузи файл.';return}
+  if(!parseSubs(subs).length){err.textContent='В субтитрах нет таймкодов. Нужен файл SRT или VTT.';return}
+  videos.push({id:Date.now().toString(36),title:$('newTitle').value.trim()||'Видео '+(videos.length+1),videoId:id,subs});
+  store.set('tp-videos',videos);renderList();
+  ['newTitle','newUrl','newSubs'].forEach(x=>$(x).value='');
+  $('newFile').value='';$('addBox').open=false;
+};
+
+function applySettings(){
+  document.documentElement.dataset.theme=settings.dark?'dark':'light';
+  document.documentElement.style.setProperty('--type',FONTS[settings.font]||FONTS.serif);
+  $('optHighlight').checked=settings.highlight;$('optPause').checked=settings.pause;
+  $('optSound').checked=settings.sound;$('optDark').checked=settings.dark;$('font').value=settings.font;
+}
+[['optHighlight','highlight'],['optPause','pause'],['optSound','sound'],['optDark','dark']].forEach(([id,key])=>{
+  $(id).onchange=()=>{settings[key]=$(id).checked;store.set('tp-settings',settings);applySettings();render()};
+});
+$('font').onchange=()=>{settings.font=$('font').value;store.set('tp-settings',settings);applySettings()};
+
+applySettings();renderList();updateStats();
+
+window.onYouTubeIframeAPIReady=()=>{ytReady=true;const p=pending;pending=null;if(p)openVideo(p)};
+</script>
+<script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>
