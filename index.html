@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Тап — печатай под видео</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;600&family=Literata:wght@400;600&display=swap">
+<style>
+:root{--f:Literata,Georgia,serif}
+[data-theme=dark]{--bg:#0f2326;--pn:#163135;--ink:#e6f4ee;--mu:#7fa3a0;--ln:#244447;--ac:#ffb347;--ok:#7fe0b0;--bad:#ff7a6b;color-scheme:dark}
+[data-theme=light]{--bg:#eef3ef;--pn:#fff;--ink:#12302f;--mu:#5b7a77;--ln:#cfdcd8;--ac:#c76a00;--ok:#17805a;--bad:#c8402f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter,system-ui,sans-serif}
+main{max-width:720px;margin:0 auto;padding:16px 16px 56px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+h1{margin:0;font:600 1.7rem var(--f);letter-spacing:-.01em}
+h2{font-size:1rem;font-weight:600;margin:28px 0 8px}
+button,input,select,textarea{font:inherit;color:var(--ink)}
+input,select,textarea{background:var(--pn);border:1px solid var(--ln);border-radius:10px;padding:12px 14px;width:100%}
+button{background:var(--pn);border:1px solid var(--ln);border-radius:10px;padding:11px 16px;cursor:pointer}
+.go{background:var(--ac);border-color:var(--ac);color:#1a1200;font-weight:600}
+[data-theme=light] .go{color:#fff}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.row{display:flex;gap:8px}
+.msg{color:var(--mu);margin:8px 0;min-height:1.5em}
+.err{color:var(--bad)}
+.frame{position:relative;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden}
+.frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.stage{background:var(--pn);border-radius:14px;padding:16px;margin-top:16px}
+.nb{color:var(--mu);font:.95rem var(--f);min-height:1.4em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#line{font:clamp(1.35rem,5vw,1.8rem)/1.55 var(--f);color:var(--mu);margin:10px 0;min-height:4.7em;white-space:pre-wrap;word-break:break-word}
+#line .ok{color:var(--ok)}
+#line .bad{color:var(--bad);text-decoration:underline}
+#line .cur{color:var(--ink);border-bottom:2px solid var(--ac)}
+#typed{font-family:var(--f);margin-top:8px}
+#lang{margin-bottom:12px}
+.stats{display:flex;gap:28px;margin-top:14px;color:var(--mu);font-size:.85rem}
+.stats b{display:block;color:var(--ink);font-size:1.3rem;font-weight:600;font-variant-numeric:tabular-nums}
+.item{display:block;width:100%;text-align:left;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+details{margin-top:24px}
+summary{cursor:pointer;padding:8px 0;font-weight:600}
+label.o{display:flex;align-items:center;gap:10px;padding:8px 0}
+label.o input{width:20px;height:20px}
+a{color:var(--ac)}
+.lb{display:block;color:var(--mu);margin:12px 0 6px;font-size:.9rem}
+.res{margin-top:18px;padding-top:14px;border-top:1px solid var(--ln)}
+.res h2{margin:0 0 4px;color:var(--ok);font-family:var(--f)}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Тап</h1><button id="theme" type="button">Светлая / тёмная</button></header>
+<div class="row"><input id="link" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Ссылка на видео (необязательно)" aria-label="Ссылка на YouTube"><button id="go" class="go" type="button">Начать</button></div>
+<p id="msg" class="msg" role="status"></p>
+<div class="frame"><div id="player"></div></div>
+<div class="stage">
+<select id="lang" hidden aria-label="Язык субтитров"></select>
+<div id="prev" class="nb"></div>
+<div id="line"></div>
+<div id="next" class="nb"></div>
+<input id="typed" type="text" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" placeholder="Печатай здесь" disabled aria-label="Поле для печати">
+<div class="stats"><div><b id="wpm">0</b>слов/мин</div><div><b id="acc">100%</b>точность</div><div><b id="pos">—</b>строка</div><div><b id="n">0</b>готово</div></div>
+<div id="res" class="res" hidden><h2>Готово!</h2><div class="stats"><div><b id="rw">0</b>слов/мин</div><div><b id="ra">0%</b>точность</div><div><b id="rl">0</b>строк</div><div><b id="rt">0:00</b>время</div></div><p><button id="again" class="go" type="button">Ещё раз</button></p></div>
+<p id="sk"><button id="skip" type="button">Пропустить строку</button></p>
+</div>
+<h2>Недавние</h2>
+<div id="hist"></div>
+<details>
+<summary>Настройки</summary>
+<p class="msg">Перетащи эту ссылку на панель закладок браузера (Ctrl+Shift+B): <a id="bm" href="#">Субтитры для Тап</a></p>
+<p><button id="bmcopy" type="button">Скопировать код закладки (для телефона)</button></p>
+<label class="lb" for="api">Свой сервер субтитров (необязательно)</label>
+<input id="api" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://tap-subs.твоё-имя.workers.dev">
+<label class="lb" for="key">Ключ Claude API (для автоматической проверки текста субтитров)</label>
+<input id="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-...">
+<p class="msg">Ключ хранится только в этом браузере и отправляется только в Anthropic. Получить его можно на platform.claude.com; лучше сразу задать там лимит расходов.</p>
+<label class="o"><input id="hl" type="checkbox"> Подсветка ошибок</label>
+<label class="o"><input id="ps" type="checkbox"> Пауза видео при ошибке</label>
+<label class="o"><input id="snd" type="checkbox"> Звук клавиш</label>
+<label class="o"><input id="es" type="checkbox"> Звук ошибки</label>
+<label class="lb" for="font">Шрифт</label>
+<select id="font"><option value="serif">С засечками</option><option value="sans">Без засечек</option><option value="mono">Моноширинный</option></select>
+</details>
+<details>
+<summary>Субтитры вручную</summary>
+<p class="msg">Если сервер не достал субтитры: вставь ссылку сверху, сюда текст SRT или VTT.</p>
+<textarea id="subs" rows="6" spellcheck="false"></textarea>
+<p><button id="manual" type="button">Использовать</button></p>
+</details>
+</main>
+<script>
+const $=i=>document.getElementById(i);
+const FONTS={serif:'Literata,Georgia,serif',sans:'Inter,system-ui,sans-serif',mono:'"JetBrains Mono",ui-monospace,monospace'};
+const S={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let cfg=Object.assign({dark:true,hl:true,pause:true,sound:true,err:true,font:'serif',api:'',key:''},S.get('tap-cfg',{}));
+let hist=S.get('tap-hist',[]),cues=[],idx=-1,done=false,prev=0,hold=false,vid=null,waiting=false;
+let st={ok:0,all:0,t0:0,t1:0,n:0},yt=null,apiOk=false,ready=false,queue=null,actx=null;
+let fin=false,atEnd=false,loadedAt=0,fixNote='',fixCache=S.get('tap-fix',{});
+const MODEL='claude-sonnet-5-5';
+const typed=$('typed');
+const fold=s=>s.replace(/[‘’ʼ]/g,"'").replace(/[“”]/g,'"').replace(/[–—]/g,'-').replace(/ё/g,'е').replace(/Ё/g,'Е');
+const same=(a,b)=>fold(a)===fold(b);
+const wrong=(v,t)=>{for(let k=0;k<v.length;k++)if(k>=t.length||!same(v[k],t[k]))return true;return false};
+const ytId=s=>{s=s.trim();if(/^[\w-]{11}$/.test(s))return s;const m=s.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([\w-]{11})/);return m&&m[1]};
+function msg(t,err){const m=$('msg');m.textContent=t;m.className='msg'+(err?' err':'')}
+
+const bmk=async()=>{try{
+ const q=new URLSearchParams(location.search).get('v')||((location.pathname.match(/\/(?:shorts|live)\/([\w-]{11})/)||[])[1]);
+ if(!q){alert('Открой страницу видео на YouTube и нажми закладку ещё раз.');return}
+ const r=await fetch('/youtubei/v1/player?prettyPrint=false',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({context:{client:{clientName:'ANDROID',clientVersion:'20.10.38',androidSdkVersion:34,hl:'en'}},videoId:q})});
+ const d=await r.json(),L=((d.captions||{}).playerCaptionsTracklistRenderer||{}).captionTracks||[];
+ if(!L.length){alert('Субтитры не найдены: '+((d.playabilityStatus||{}).reason||'у видео их нет'));return}
+ const p=L.find(t=>t.kind!=='asr')||L[0];
+ const raw=await(await fetch(p.baseUrl+'&fmt=json3')).text();
+ if(!raw.trim()){alert('YouTube вернул пустой ответ на запрос субтитров.');return}
+ const dec=x=>{for(let i=0;i<2;i++)x=x.replace(/&#x([\da-f]+);/gi,(m,h)=>String.fromCharCode(parseInt(h,16))).replace(/&#(\d+);/g,(m,n)=>String.fromCharCode(+n)).replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');return x};
+ const ev=[];
+ if(raw.trim()[0]==='{'){for(const e of JSON.parse(raw).events||[]){if(e.segs)ev.push({s:e.tStartMs/1000,d:(e.dDurationMs||0)/1000,t:e.segs.map(x=>x.utf8).join('')})}}
+ else{let m;const ra=/<text start="([\d.]+)"(?: dur="([\d.]+)")?[^>]*>([\s\S]*?)<\/text>/g,rb=/<p t="(\d+)"(?: d="(\d+)")?[^>]*>([\s\S]*?)<\/p>/g;
+  while((m=ra.exec(raw)))ev.push({s:+m[1],d:+(m[2]||0),t:m[3]});
+  while((m=rb.exec(raw)))ev.push({s:+m[1]/1000,d:+(m[2]||0)/1000,t:m[3]})}
+ const cues=[];let cur=null;
+ for(const e of ev){const t=dec(e.t.replace(/<[^>]*>/g,'')).replace(/\s+/g,' ').trim();if(!t)continue;const s=e.s,end=s+e.d;
+  if(cur&&s-cur.end<1.2&&cur.text.length+t.length<60&&!/[.!?…]$/.test(cur.text)){cur.text+=' '+t;cur.end=end}else{cur={start:s,end:end,text:t};cues.push(cur)}}
+ if(!cues.length){alert('Не удалось разобрать субтитры. Начало ответа: '+raw.slice(0,80));return}
+ const j=JSON.stringify({v:q,title:(d.videoDetails||{}).title||'',lang:p.languageCode,cues:cues});
+ try{await navigator.clipboard.writeText(j);alert('Готово: скопировано строк: '+cues.length+'. Вернись на сайт «Тап» и нажми «Начать».')}
+ catch(e){prompt('Скопируй этот текст (Ctrl+C), потом на сайте «Тап» нажми «Начать»:',j)}
+}catch(e){alert('Ошибка: '+e.message)}};
+$('bm').href='javascript:'+encodeURIComponent('('+bmk.toString()+')()');
+async function fromClip(){try{const j=JSON.parse(await navigator.clipboard.readText());if(!j.v||!j.cues||!j.cues.length)throw 0;
+ $('link').value='https://youtu.be/'+j.v;load(j.v,null,{cues:j.cues,title:j.title})}
+ catch(e){msg('Сначала открой видео на YouTube и нажми закладку «Субтитры для Тап» (она в «Настройках»). Потом вернись сюда и нажми «Начать».',true)}}
+
+function parseSubs(raw){const o=[];const sec=s=>s.trim().replace(',','.').split(':').reduce((p,v)=>p*60+parseFloat(v),0);
+ raw.replace(/\r/g,'').split(/\n\s*\n/).forEach(b=>{const l=b.split('\n'),i=l.findIndex(x=>x.includes('-->'));if(i<0)return;
+  const [a,z]=l[i].split('-->'),s=sec(a),e=sec(z.trim().split(/\s+/)[0]);
+  const t=l.slice(i+1).join(' ').replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim();
+  if(t&&!isNaN(s))o.push({start:s,end:isNaN(e)?s+3:e,text:t})});
+ return o.sort((a,b)=>a.start-b.start)}
+const active=t=>{let lo=0,hi=cues.length-1,r=-1;while(lo<=hi){const m=(lo+hi)>>1;if(cues[m].start<=t){r=m;lo=m+1}else hi=m-1}return r};
+
+const ac=()=>{actx=actx||new(window.AudioContext||window.webkitAudioContext)();if(actx.state==='suspended')actx.resume();return actx};
+function tick(){if(!cfg.sound)return;try{ac();
+ const n=Math.floor(actx.sampleRate*.012),b=actx.createBuffer(1,n,actx.sampleRate),d=b.getChannelData(0);
+ for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,8);
+ const s=actx.createBufferSource(),f=actx.createBiquadFilter(),g=actx.createGain();
+ f.type='bandpass';f.frequency.value=2200+Math.random()*700;f.Q.value=.9;g.gain.value=.5;
+ s.buffer=b;s.connect(f);f.connect(g);g.connect(actx.destination);s.start()}catch(e){}}
+function buzz(){if(!cfg.err)return;try{const c=ac(),t=c.currentTime,o=c.createOscillator(),f=c.createBiquadFilter(),g=c.createGain();
+ o.type='square';o.frequency.setValueAtTime(210,t);o.frequency.exponentialRampToValueAtTime(120,t+.15);
+ f.type='lowpass';f.frequency.value=1100;
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.11,t+.012);g.gain.exponentialRampToValueAtTime(.0001,t+.17);
+ o.connect(f);f.connect(g);g.connect(c.destination);o.start(t);o.stop(t+.2)}catch(e){}}
+
+function render(){
+ const t=idx>=0?cues[idx].text:'',v=typed.value,f=document.createDocumentFragment();
+ for(let k=0;k<Math.max(t.length,v.length);k++){const s=document.createElement('span');s.textContent=k<t.length?t[k]:v[k];
+  if(k<v.length){const g=k<t.length&&same(v[k],t[k]);s.className=cfg.hl?(g?'ok':'bad'):'ok'}else if(k===v.length)s.className='cur';f.append(s)}
+ $('line').replaceChildren(f);
+ $('prev').textContent=idx>0?cues[idx-1].text:'';
+ $('next').textContent=idx>=0&&cues[idx+1]?cues[idx+1].text:'';
+}
+function setLine(i){idx=i;done=false;prev=0;hold=false;waiting=false;typed.value='';render();$('pos').textContent=i>=0?(i+1)+'/'+cues.length:'—';msg(i>=0?'':'Жду первую строку…')}
+function stat(){const m=st.t0?((st.t1||Date.now())-st.t0)/6e4:0;$('wpm').textContent=m>.02?Math.round(st.ok/5/m):0;$('acc').textContent=(st.all?Math.round(st.ok/st.all*100):100)+'%';$('n').textContent=st.n}
+
+typed.addEventListener('input',()=>{
+ if(idx<0||done){typed.value='';prev=0;return}
+ const t=cues[idx].text,v=typed.value;
+ if(v.length>prev){if(!st.t0)st.t0=Date.now();let bad=0;for(let k=prev;k<v.length;k++){st.all++;if(k<t.length&&same(v[k],t[k]))st.ok++;else bad++}if(bad)buzz();else tick()}
+ prev=v.length;
+ const w=wrong(v,t);
+ if(v.length&&same(v,t)){done=true;st.n++;msg('Готово. Жди следующую строку.')}else msg(w?'Ошибка. Исправь её.':'',w);
+ if(cfg.pause&&ready){if(w){yt.pauseVideo();hold=true}else if(hold){hold=false;if(!waiting)yt.playVideo()}}
+ render();stat();
+ if(done){if(atEnd||idx>=cues.length-1)setTimeout(finish,400);else if(waiting)setTimeout(nextLine,250)}
+});
+function nextLine(){if(!waiting)return;if(atEnd||idx>=cues.length-1)return finish();const i=idx+1;setLine(i);yt.playVideo()}
+function ending(){if(atEnd||fin)return;atEnd=true;yt.pauseVideo();if(done||idx<0)finish();else{waiting=true;msg('Видео закончилось: допиши последнюю строку, потом покажу результат.')}}
+function finish(){if(fin)return;fin=true;st.t1=Date.now();try{yt.stopVideo()}catch(e){}
+ typed.disabled=true;stat();const s=Math.round((st.t1-(st.t0||st.t1))/1000);
+ $('rw').textContent=$('wpm').textContent;$('ra').textContent=$('acc').textContent;$('rl').textContent=st.n+'/'+cues.length;
+ $('rt').textContent=Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+ $('res').hidden=false;$('sk').hidden=true;msg('');$('res').scrollIntoView({behavior:'smooth',block:'nearest'})}
+function reset(){fin=false;atEnd=false;st={ok:0,all:0,t0:0,t1:0,n:0};typed.disabled=false;$('res').hidden=true;$('sk').hidden=false;loadedAt=Date.now();setLine(-1);stat()}
+setInterval(()=>{if(!ready||!cues.length||waiting||fin)return;const t=yt.getCurrentTime(),i=active(t),D=yt.getDuration();
+ if(D>5&&D-t<1&&Date.now()-loadedAt>2500){ending();return}
+ if(i!==idx){if(i===idx+1&&idx>=0&&!done){yt.pauseVideo();waiting=true;msg('Видео ждёт: допиши строку.')}else setLine(i)}
+ if(st.t0)stat()},200);
+
+function play(id){
+ if(!apiOk){queue=id;return}
+ if(!yt){yt=new YT.Player('player',{videoId:id,width:'100%',height:'100%',playerVars:{playsinline:1,rel:0},events:{onReady:()=>{ready=true;if(queue){yt.loadVideoById(queue);queue=null}},onStateChange:e=>{if(e.data===0&&!fin&&!atEnd&&cues.length&&Date.now()-loadedAt>2500){const D=yt.getDuration();if(D>5)yt.seekTo(D-1.2,true);ending()}}}})}
+ else if(ready)yt.loadVideoById(id);else queue=id;
+}
+window.onYouTubeIframeAPIReady=()=>{apiOk=true;if(queue){const q=queue;queue=null;play(q)}};
+
+const tidy=s=>s.replace(/[\u00a0\u2009\u202f]/g,' ').replace(/[\u200b-\u200f\ufeff]/g,'').replace(/\[[^\]]*\]/g,' ').replace(/[♪♫]/g,' ').replace(/^\s*>>+\s*/,'').replace(/[“”«»„]/g,'"').replace(/[‘’ʼ]/g,"'").replace(/[–—]/g,'-').replace(/…/g,'...').replace(/\s+([,.!?;:])/g,'$1').replace(/\s+/g,' ').trim();
+const ENDS=/[.!?]["')\]]*$/,ABBR=/(?:^|\s)(?:Mr|Mrs|Ms|Dr|vs|т\.е|т\.к)\.$/i;
+const stop=s=>ENDS.test(s)&&!ABBR.test(s);
+function sentences(a){const o=[];let c=null;
+ a.forEach((q,i)=>{if(c){c.text+=' '+q.text;c.end=q.end}else c={start:q.start,end:q.end,text:q.text};
+  const n=a[i+1];if(!n||stop(c.text)||n.start-q.end>3||c.text.length>=200){o.push(c);c=null}});
+ return o}
+const SYS='You proofread subtitles of a YouTube video (any language, often Russian or English; may be auto-generated speech recognition or song lyrics) for a typing-practice app. Input is JSON {"before":[...],"lines":[...]}: "before" is preceding context only, "lines" are the subtitle lines to fix. Return ONLY a JSON array of strings: exactly one corrected string per input line, same order, same count. Fix recognition errors, misheard words, misspellings, wrong word forms and wrong names using the context; add correct punctuation and capital letters. Put . ! or ? only where a sentence really ends (a sentence may continue over several lines), and start the next sentence with a capital letter. Do not translate, paraphrase, shorten, expand, merge or split lines; move no words between lines. Remove sound tags like [Music] and speaker marks. Use plain straight quotes and a simple hyphen, no typographic quotes, dashes or ellipsis characters. If a line is already correct, return it unchanged. No explanations, no markdown.';
+async function claudeFix(src){
+ const out=src.map(c=>c.text),jobs=[];for(let a=0;a<src.length;a+=40)jobs.push(a);
+ let nx=0,dn=0,bad=0;
+ const work=async()=>{while(nx<jobs.length){const a=jobs[nx++],part=out.slice(a,a+40);
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+   body:JSON.stringify({model:MODEL,max_tokens:8000,system:SYS,messages:[{role:'user',content:JSON.stringify({before:src.slice(Math.max(0,a-3),a).map(c=>c.text),lines:part})}]})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){nx=jobs.length;throw new Error((j.error&&j.error.message)||('ошибка '+r.status))}
+  try{const m=(j.content||[]).map(b=>b.text||'').join('').match(/\[[\s\S]*\]/),f=JSON.parse(m[0]);
+   if(!Array.isArray(f)||f.length!==part.length)throw 0;
+   f.forEach((s,k)=>{if(typeof s!=='string')return;s=tidy(s);const o=part[k];if(s&&s.length>o.length*.5&&s.length<o.length*1.8+8)out[a+k]=s})}
+  catch(e){bad++}
+  dn+=part.length;msg('Claude проверяет текст… '+Math.min(dn,src.length)+'/'+src.length)}};
+ await Promise.all([work(),work(),work()]);
+ return{out,bad}}
+async function prepare(raw,id,lang){
+ let src=raw.map(c=>({start:c.start,end:c.end,text:tidy(c.text||'')})).filter(c=>c.text);
+ if(!src.length)throw new Error('В субтитрах нет строк.');
+ fixNote='';
+ if(cfg.key){
+  const k=id+':'+lang+':'+src.length+':'+src.reduce((n,c)=>n+c.text.length,0);let fx=fixCache[k];
+  if(!fx||fx.length!==src.length){fx=null;msg('Claude проверяет текст…');
+   try{const r=await claudeFix(src);fx=r.out;
+    if(r.bad)fixNote=' Часть строк Claude проверить не смог.';
+    else{fixCache[k]=fx;const ks=Object.keys(fixCache);if(ks.length>8)delete fixCache[ks[0]];S.set('tap-fix',fixCache)}}
+   catch(e){fixNote=' Claude не проверил текст: '+e.message}}
+  if(fx)src=src.map((c,i)=>({start:c.start,end:c.end,text:fx[i]}))
+ }else fixNote=' Чтобы Claude исправлял ошибки в тексте, вставь ключ API в «Настройки».';
+ return sentences(src)}
+
+async function load(id,lang,manual){
+ vid=id;cues=[];setLine(-1);typed.disabled=true;$('res').hidden=true;if(ready)yt.pauseVideo();msg('Ищу субтитры…');
+ try{
+  let d;
+  if(manual)d=Array.isArray(manual)?{cues:manual,tracks:[],title:(hist.find(h=>h.id===id)||{}).title||'Видео'}:{cues:manual.cues,tracks:[],title:manual.title};
+  else{
+   if(!cfg.api)throw new Error('Не указан адрес сервера субтитров. Открой «Настройки».');
+   let r;try{r=await fetch(cfg.api.replace(/\/$/,'')+'/?v='+id+(lang?'&lang='+lang:''))}catch(e){throw new Error('Сервер субтитров не отвечает.')}
+   d=await r.json();if(d.error)throw new Error(d.error);
+  }
+  if(!d.cues||!d.cues.length)throw new Error('В субтитрах нет строк.');
+  cues=await prepare(d.cues,id,d.lang||lang||'');
+  hist=[{id,title:d.title||'Видео'},...hist.filter(h=>h.id!==id)].slice(0,20);S.set('tap-hist',hist);drawHist();
+  const L=$('lang');L.replaceChildren();
+  (d.tracks||[]).forEach(t=>{const o=document.createElement('option');o.value=t.lang;o.textContent=t.name+(t.auto?' (авто)':'');L.append(o)});
+  L.value=d.lang||'';L.hidden=!d.tracks||d.tracks.length<2;
+  reset();play(id);
+  msg('Если видео не пошло, нажми Play.'+fixNote);
+ }catch(e){msg(e.message+' Можно вставить субтитры вручную внизу.',true)}
+}
+function drawHist(){const h=$('hist');h.replaceChildren();
+ if(!hist.length){h.textContent='Здесь появятся открытые видео.';h.className='msg';return}
+ h.className='';
+ hist.forEach(v=>{const b=document.createElement('button');b.type='button';b.className='item';b.textContent=v.title;
+  b.onclick=()=>{$('link').value='https://youtu.be/'+v.id;load(v.id)};h.append(b)})}
+
+$('go').onclick=()=>{const id=ytId($('link').value);if(!cfg.api)return fromClip();if(!id)return msg('Не нашёл видео в ссылке.',true);load(id)};
+$('link').onkeydown=e=>{if(e.key==='Enter')$('go').click()};
+$('lang').onchange=()=>load(vid,$('lang').value);
+$('manual').onclick=()=>{const id=ytId($('link').value);if(!id)return msg('Сначала вставь ссылку на видео сверху.',true);
+ const c=parseSubs($('subs').value);if(!c.length)return msg('Нужен текст SRT или VTT с таймкодами.',true);load(id,null,c)};
+
+function apply(){const r=document.documentElement;r.dataset.theme=cfg.dark?'dark':'light';r.style.setProperty('--f',FONTS[cfg.font]);
+ $('hl').checked=cfg.hl;$('ps').checked=cfg.pause;$('snd').checked=cfg.sound;$('es').checked=cfg.err;$('key').value=cfg.key;$('font').value=cfg.font;$('api').value=cfg.api;S.set('tap-cfg',cfg)}
+$('theme').onclick=()=>{cfg.dark=!cfg.dark;apply()};
+[['hl','hl'],['ps','pause'],['snd','sound'],['es','err']].forEach(([i,k])=>$(i).onchange=()=>{cfg[k]=$(i).checked;apply();render()});
+$('font').onchange=()=>{cfg.font=$('font').value;apply()};
+$('api').onchange=()=>{cfg.api=$('api').value.trim();apply()};
+$('key').onchange=()=>{cfg.key=$('key').value.trim();apply()};
+$('again').onclick=()=>{reset();if(ready)yt.loadVideoById(vid)};
+$('skip').onclick=()=>{if(idx<0||done)return;done=true;typed.value='';msg('Строка пропущена.');if(atEnd||idx>=cues.length-1)finish();else if(waiting)nextLine()};
+$('bmcopy').onclick=async()=>{try{await navigator.clipboard.writeText($('bm').href);alert('Код закладки скопирован.')}catch(e){prompt('Скопируй этот код (Ctrl+C):',$('bm').href)}};
+apply();drawHist();render();stat();
+</script>
+<script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>
